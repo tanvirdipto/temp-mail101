@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/admin/login -H \"Content-Type: application/json\" -d '{\"\"username\"\":\"\"admin\"\",\"\"password\"\":\"\"admin123\"\"}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://localhost:3000/api/admin/login -H \"Content-Type: application/json\" -d '{\"\"username\"\":\"\"admin\"\",\"\"password\"\":\"\"admin123\"\"}')",
+      "Bash(node -e \"const bcrypt = require\\(''bcryptjs''\\); console.log\\(bcrypt.compareSync\\(''admin123'', bcrypt.hashSync\\(''admin123'', 10\\)\\)\\)\")",
+      "Bash(node -e \"require\\(''jsonwebtoken''\\)\")",
+      "Bash(mysql -u root tempmail -e \"SELECT id, username, password_hash FROM admins;\")",
+      "Bash(brew services:*)",
+      "Bash(mysql.server start:*)",
+      "Bash(mysql -u root -e \"CREATE DATABASE IF NOT EXISTS tempmail;\")"
+    ]
+  }
+}
