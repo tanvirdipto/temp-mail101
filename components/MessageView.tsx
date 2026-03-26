@@ -3,21 +3,23 @@
 interface MessageViewProps {
   message: {
     id: string;
-    from: { address: string; name: string };
-    to: { address: string; name: string }[];
+    from: string;
+    from_name: string;
     subject: string;
     text: string;
-    html: string[];
-    createdAt: string;
+    html: string;
+    received_at: string;
+    has_attachments: boolean;
+    attachments: any[];
   } | null;
   isLoading: boolean;
   onBack: () => void;
 }
 
-function sanitizeHtml(htmlParts: string[]): string {
-  const raw = htmlParts.join("");
+function sanitizeHtml(html: string): string {
+  if (!html) return "";
   // Remove script tags and event handlers for safety
-  return raw
+  return html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/\son\w+="[^"]*"/gi, "")
     .replace(/\son\w+='[^']*'/gi, "")
@@ -46,8 +48,8 @@ export default function MessageView({
 
   if (!message) return null;
 
-  const formattedDate = new Date(message.createdAt).toLocaleString();
-  const hasHtml = message.html && message.html.length > 0 && message.html.some(h => h.length > 0);
+  const formattedDate = new Date(message.received_at).toLocaleString();
+  const hasHtml = message.html && message.html.length > 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -67,11 +69,7 @@ export default function MessageView({
         <div className="mt-2 text-sm text-gray-500 space-y-0.5">
           <p>
             <span className="text-gray-400">From:</span>{" "}
-            {message.from.name ? `${message.from.name} <${message.from.address}>` : message.from.address}
-          </p>
-          <p>
-            <span className="text-gray-400">To:</span>{" "}
-            {message.to.map((t) => t.address).join(", ")}
+            {message.from_name ? `${message.from_name} <${message.from}>` : message.from}
           </p>
           <p>
             <span className="text-gray-400">Date:</span> {formattedDate}

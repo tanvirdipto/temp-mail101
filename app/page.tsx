@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import EmailHeader from "@/components/EmailHeader";
 import Inbox, { InboxMessage } from "@/components/Inbox";
@@ -16,21 +16,22 @@ import Footer from "@/components/Footer";
 
 interface FullMessage {
   id: string;
-  from: { address: string; name: string };
-  to: { address: string; name: string }[];
+  from: string;
+  from_name: string;
   subject: string;
   text: string;
-  html: string[];
-  createdAt: string;
+  html: string;
+  received_at: string;
+  has_attachments: boolean;
+  attachments: any[];
 }
 
 type SiteContent = Record<string, Record<string, string>>;
 
-const STORAGE_KEY = "tempmail_session";
+const STORAGE_KEY = "tempmail_email";
 
 export default function Home() {
   const [email, setEmail] = useState("");
-  const [token, setToken] = useState("");
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fullMessage, setFullMessage] = useState<FullMessage | null>(null);
@@ -38,9 +39,6 @@ export default function Home() {
   const [messageLoading, setMessageLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [siteContent, setSiteContent] = useState<SiteContent>({});
-
-  const tokenRef = useRef(token);
-  tokenRef.current = token;
 
   // Fetch site content from DB
   useEffect(() => {
@@ -50,9 +48,9 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  const saveSession = useCallback((address: string, tok: string) => {
+  const saveSession = useCallback((address: string) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ address, token: tok }));
+      localStorage.setItem(STORAGE_KEY, address);
     } catch {
       // localStorage unavailable
     }
@@ -67,19 +65,35 @@ export default function Home() {
   }, []);
 
   const fetchMessages = useCallback(async () => {
+    if (!email) return;
+
     try {
       const res = await fetch(
-        `/api/messages?token=${encodeURIComponent(tokenRef.current)}`
+        `/api/temp-email/messages?email=${encodeURIComponent(email)}`
       );
       if (!res.ok) return;
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setMessages(data);
+
+      if (data.success && Array.isArray(data.messages)) {
+        const formattedMessages: InboxMessage[] = data.messages.map((msg: any) => ({
+          id: msg.id,
+          from: { address: msg.from, name: msg.from_name },
+          subject: msg.subject,
+          intro: msg.subject,
+          seen: msg.is_seen,
+          isDeleted: false,
+          hasAttachments: msg.has_attachments,
+          size: 0,
+          downloadUrl: "",
+          createdAt: msg.received_at,
+          updatedAt: msg.received_at,
+        }));
+        setMessages(formattedMessages);
       }
-    } catch {
-      // Silently fail on poll errors
+    } catch (err) {
+      console.error("Failed to fetch messages:", err);
     }
-  }, []);
+  }, [email]);
 
   const createNewAccount = useCallback(async (domain?: string) => {
     setAccountLoading(true);
@@ -90,24 +104,28 @@ export default function Home() {
     clearSession();
 
     try {
-      const res = await fetch("/api/create-account", {
+      const res = await fetch("/api/temp-email/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain }),
       });
-      if (!res.ok) throw new Error("Failed to create account");
+
+      if (!res.ok) throw new Error("Failed to create email");
+
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      setEmail(data.address);
-      setToken(data.token);
-      saveSession(data.address, data.token);
+      setEmail(data.email);
+      saveSession(data.email);
+
+      // Fetch messages immediately
+      setTimeout(() => fetchMessages(), 1000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setAccountLoading(false);
     }
-  }, [clearSession, saveSession]);
+  }, [clearSession, saveSession, fetchMessages]);
 
   // On mount: try to restore from localStorage, otherwise create new account
   useEffect(() => {
@@ -115,36 +133,40 @@ export default function Home() {
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
-          const { address, token: storedToken } = JSON.parse(stored);
-          if (address && storedToken) {
-            // Validate with a 5-second timeout to avoid hanging on expired tokens
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 5000);
-            try {
-              const res = await fetch(
-                `/api/messages?token=${encodeURIComponent(storedToken)}`,
-                { signal: controller.signal }
-              );
-              clearTimeout(timeout);
-              if (res.ok) {
-                setEmail(address);
-                setToken(storedToken);
-                const data = await res.json();
-                if (Array.isArray(data)) {
-                  setMessages(data);
+          setEmail(stored);
+          setAccountLoading(false);
+          // Fetch messages for stored email
+          setTimeout(() => {
+            fetch(`/api/temp-email/messages?email=${encodeURIComponent(stored)}`)
+              .then(res => res.json())
+              .then(data => {
+                if (data.success && Array.isArray(data.messages)) {
+                  const formattedMessages: InboxMessage[] = data.messages.map((msg: any) => ({
+                    id: msg.id,
+                    from: { address: msg.from, name: msg.from_name },
+                    subject: msg.subject,
+                    intro: msg.subject,
+                    seen: msg.is_seen,
+                    isDeleted: false,
+                    hasAttachments: msg.has_attachments,
+                    size: 0,
+                    downloadUrl: "",
+                    createdAt: msg.received_at,
+                    updatedAt: msg.received_at,
+                  }));
+                  setMessages(formattedMessages);
                 }
-                setAccountLoading(false);
-                return;
-              }
-            } catch {
-              clearTimeout(timeout);
-            }
-            // Token invalid or timed out — clear it
-            clearSession();
-          }
+              })
+              .catch(() => {
+                // If fetch fails, create new email
+                clearSession();
+                createNewAccount();
+              });
+          }, 500);
+          return;
         }
       } catch {
-        // Invalid stored data, fall through to create new
+        // Invalid stored data
       }
       createNewAccount();
     }
@@ -152,12 +174,12 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Message polling - fetches every 5 seconds
+  // Message polling - fetches every 10 seconds
   useEffect(() => {
-    if (!token) return;
-    const interval = setInterval(fetchMessages, 5000);
+    if (!email) return;
+    const interval = setInterval(fetchMessages, 10000);
     return () => clearInterval(interval);
-  }, [token, fetchMessages]);
+  }, [email, fetchMessages]);
 
   const handleSelectMessage = useCallback(
     async (id: string) => {
@@ -166,22 +188,27 @@ export default function Home() {
 
       try {
         const res = await fetch(
-          `/api/messages/${id}?token=${encodeURIComponent(token)}`
+          `/api/temp-email/messages/${id}?email=${encodeURIComponent(email)}`
         );
         if (!res.ok) throw new Error("Failed to fetch message");
-        const data = await res.json();
-        setFullMessage(data);
 
-        setMessages((prev) =>
-          prev.map((m) => (m.id === id ? { ...m, seen: true } : m))
-        );
-      } catch {
+        const data = await res.json();
+        if (data.success && data.message) {
+          setFullMessage(data.message);
+
+          // Mark as seen
+          setMessages((prev) =>
+            prev.map((m) => (m.id === id ? { ...m, seen: true } : m))
+          );
+        }
+      } catch (err) {
+        console.error("Failed to fetch message:", err);
         setFullMessage(null);
       } finally {
         setMessageLoading(false);
       }
     },
-    [token]
+    [email]
   );
 
   const handleBack = useCallback(() => {
