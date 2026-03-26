@@ -39,6 +39,10 @@ npm run dev
 
 See `/docs/implementation/` for complete setup guides.
 
+## Deployment
+
+Auto-deploys to Vercel on push to main branch.
+
 ## License
 
 Private - All rights reserved
