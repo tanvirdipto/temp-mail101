@@ -76,7 +76,7 @@ export class ImapService {
           const isSeen = item.attributes.flags.includes('\\Seen')
 
           // Extract attachments
-          const attachments = parsed.attachments?.map((att) => ({
+          const attachments = parsed.attachments?.map((att: any) => ({
             filename: att.filename || 'unnamed',
             content_type: att.contentType,
             size: att.size,
