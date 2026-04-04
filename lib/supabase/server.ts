@@ -4,12 +4,10 @@ import { cookies } from 'next/headers'
 export async function createClient() {
   const cookieStore = await cookies()
 
-  // Use service role key if anon key is not available (Vercel env issue workaround)
-  const apiKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!
-
+  // Use service role key directly (anon key has build-time issues with NEXT_PUBLIC_ prefix)
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    apiKey,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       cookies: {
         get(name: string) {
