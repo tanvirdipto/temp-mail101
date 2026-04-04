@@ -42,7 +42,7 @@ See `/docs/implementation/` for complete setup guides.
 ## Deployment
 
 Auto-deploys to Vercel on push to main branch.
-Environment variables configured and verified.
+All environment variables properly configured.
 
 ## License
 
